@@ -20,16 +20,20 @@ use typed_builder::TypedBuilder;
 
 pub type AuthResult<T, E = AuthError> = anyhow::Result<T, E>;
 
-#[async_trait::async_trait]
-pub trait AuthProvider: Send + Sync {
+#[trait_variant::make(AuthProvider: Send)]
+pub trait LocalAuthProvider {
+    /// Do the access token authentication process.
     async fn do_access_token(&self, account: &model::AuthAccount)
         -> AuthResult<model::AccessToken>;
 
+    /// Do the refresh token authentication process.
     async fn do_revoke_token(&self, refresh_token: &str) -> AuthResult<()>;
 
+    /// Do the refresh token authentication process.
     async fn do_refresh_token(&self, refresh_token: &str) -> AuthResult<model::RefreshToken>;
 
-    fn supports(&self, t: &AuthStrategy) -> bool;
+    /// Check if the provider supports the given auth strategy.
+    fn support(&self, t: &AuthStrategy) -> bool;
 }
 
 trait RequestContextExt {
@@ -107,11 +111,7 @@ impl<'a> RequestContext<'a> {
 
     async fn load_arkose_token(&mut self) -> AuthResult<()> {
         let arkose_token = match self.account.arkose_token.as_deref() {
-            Some(arkose_token) => {
-                let arkose_token = ArkoseToken::from(arkose_token);
-                let _ = arkose_token.callback().await;
-                arkose_token
-            }
+            Some(arkose_token) => ArkoseToken::from(arkose_token),
             None => arkose::ArkoseToken::new_from_context(
                 ArkoseContext::builder()
                     .client(with_context!(arkose_client))
